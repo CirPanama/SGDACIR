@@ -1,1 +1,5 @@
 .streamlit/secrets.toml
+# Si creaste secrets.toml en la raíz por error (Streamlit no lo usa ahí)
+/secrets.toml
+__pycache__/
+*.py[cod]

@@ -7,7 +7,7 @@ from SupabaseConnection import get_supabase_connection
 
 st.set_page_config(page_title="Prueba Supabase", layout="centered")
 st.title("Prueba de conexión Supabase")
-st.caption("Usa las mismas credenciales que [connections.supabase] en .streamlit/secrets.toml")
+st.caption("Credenciales: .streamlit/secrets.toml o variables de entorno SUPABASE_URL y SUPABASE_KEY.")
 
 try:
     conn = get_supabase_connection()

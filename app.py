@@ -5,17 +5,42 @@ from SupabaseConnection import LegalDB
 from configuracion import ModuloConfiguracion
 from contabilidad import ModuloContabilidad
 
-db = LegalDB()
-mod_config = ModuloConfiguracion(db)
-mod_contabilidad = ModuloContabilidad(db)
+
+def _backend():
+    """Crea una sola vez por sesión de navegador (evita fallar al importar si no hay secrets.toml)."""
+    if "_sgda_db" not in st.session_state:
+        st.session_state._sgda_db = LegalDB()
+        st.session_state._sgda_mod_config = ModuloConfiguracion(st.session_state._sgda_db)
+        st.session_state._sgda_mod_contabilidad = ModuloContabilidad(st.session_state._sgda_db)
+    return (
+        st.session_state._sgda_db,
+        st.session_state._sgda_mod_config,
+        st.session_state._sgda_mod_contabilidad,
+    )
 
 
 def main():
     st.set_page_config(page_title="SGDA Legal ERP", layout="wide", page_icon="⚖️")
 
+    try:
+        db, mod_config, mod_contabilidad = _backend()
+    except ValueError as e:
+        st.error("⚠️ No se pudieron cargar las credenciales de Supabase.")
+        st.caption(str(e))
+        st.markdown(
+            "En **GitHub Codespaces**: *Settings* (tu avatar) → *Your personal settings* → "
+            "*Codespaces* → *Codespaces secrets*, o secretos del **repositorio**: "
+            "`SUPABASE_URL` y `SUPABASE_KEY`."
+        )
+        st.info(
+            "También puede crear `/workspaces/SGDACIR/.streamlit/secrets.toml` "
+            "copiando `.streamlit/secrets.example.toml` y rellenando los valores."
+        )
+        return
+
     # --- LÓGICA DE SESIÓN ---
     if 'auth' not in st.session_state:
-        mostrar_login()
+        mostrar_login(db)
         return
 
     user = st.session_state['auth']
@@ -41,7 +66,7 @@ def main():
         st.info("Bienvenido al panel de control judicial.")
 
     elif menu == "👤 Clientes":
-        gestionar_clientes_legal()
+        gestionar_clientes_legal(db, mod_config)
 
     elif menu == "📂 Inventario Judicial":
         st.header("Gestión de Expedientes")
@@ -57,7 +82,7 @@ def main():
         # 'Inyectamos' el módulo de configuración que subiste
         mod_config.render()
 
-def mostrar_login():
+def mostrar_login(db):
     st.title("⚖️ Acceso SGDA")
     with st.form("login"):
         u = st.text_input("Usuario")
@@ -77,7 +102,7 @@ def mostrar_login():
             else:
                 st.error("Credenciales Incorrectas")
 
-def gestionar_clientes_legal():
+def gestionar_clientes_legal(db, mod_config):
     st.header("Registro de Clientes")
     with st.form("registro_cliente"):
         nom = st.text_input("Nombre Completo / Razón Social")

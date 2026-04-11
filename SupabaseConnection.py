@@ -1,15 +1,33 @@
+import os
+
 import streamlit as st
 from st_supabase_connection import SupabaseConnection
 
+try:
+    from streamlit.errors import StreamlitSecretNotFoundError
+except ImportError:
+    StreamlitSecretNotFoundError = KeyError
+
 
 def _credenciales_supabase():
-    """Lee URL y clave con el formato oficial (SUPABASE_*) o el alternativo (url/key)."""
+    """Lee SUPABASE_* del entorno primero (Codespaces); si falta algo, usa secrets.toml."""
+    url = os.environ.get("SUPABASE_URL")
+    key = os.environ.get("SUPABASE_KEY")
+    if url:
+        url = str(url).strip()
+    if key:
+        key = str(key).strip()
+    if url and key:
+        return url, key
     try:
         sec = st.secrets["connections"]["supabase"]
-    except (KeyError, TypeError):
-        return None, None
-    url = sec.get("SUPABASE_URL") or sec.get("url")
-    key = sec.get("SUPABASE_KEY") or sec.get("key")
+        if isinstance(sec, dict):
+            if not url:
+                url = sec.get("SUPABASE_URL") or sec.get("url")
+            if not key:
+                key = sec.get("SUPABASE_KEY") or sec.get("key")
+    except (StreamlitSecretNotFoundError, KeyError, TypeError):
+        pass
     if url:
         url = str(url).strip()
     if key:
@@ -18,12 +36,15 @@ def _credenciales_supabase():
 
 
 def get_supabase_connection():
-    """Conexión única con credenciales explícitas para evitar fallos por nombres de clave."""
+    """Conexión única con credenciales explícitas."""
     url, key = _credenciales_supabase()
     if not url or not key:
         raise ValueError(
-            "Faltan credenciales en .streamlit/secrets.toml: "
-            "defina SUPABASE_URL y SUPABASE_KEY bajo [connections.supabase]."
+            "Faltan SUPABASE_URL y SUPABASE_KEY. Opciones: "
+            "(1) Archivo .streamlit/secrets.toml con [connections.supabase]; "
+            "(2) En Codespaces: Settings → Secrets and variables → Codespaces → "
+            "añadir secretos de repositorio SUPABASE_URL y SUPABASE_KEY; "
+            "(3) export SUPABASE_URL=... y SUPABASE_KEY=... en la terminal antes de arrancar."
         )
     try:
         return st.connection(
@@ -33,7 +54,6 @@ def get_supabase_connection():
             key=key,
         )
     except TypeError:
-        # Compatibilidad si la versión de Streamlit no acepta url/key como kwargs
         return st.connection("supabase", type=SupabaseConnection)
 
 
