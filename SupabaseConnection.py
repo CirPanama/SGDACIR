@@ -1,4 +1,5 @@
 import os
+from pathlib import Path
 
 import streamlit as st
 from st_supabase_connection import SupabaseConnection
@@ -9,8 +10,29 @@ except ImportError:
     StreamlitSecretNotFoundError = KeyError
 
 
+def _cargar_env():
+    """Carga .env en la raíz del repo (sin usar st.secrets). Evita errores si no hay secrets.toml."""
+    try:
+        from dotenv import load_dotenv
+    except ImportError:
+        return
+    env_path = Path(__file__).resolve().parent / ".env"
+    if env_path.is_file():
+        load_dotenv(env_path)
+
+
+def _ruta_secrets_streamlit() -> Path:
+    return Path(__file__).resolve().parent / ".streamlit" / "secrets.toml"
+
+
+def _hay_secrets_toml_streamlit() -> bool:
+    """Streamlit solo considera válidos estos archivos; si no existen, st.connection puede fallar."""
+    return _ruta_secrets_streamlit().is_file() or (Path.home() / ".streamlit" / "secrets.toml").is_file()
+
+
 def _credenciales_supabase():
-    """Lee SUPABASE_* del entorno primero (Codespaces); si falta algo, usa secrets.toml."""
+    """Orden: .env → variables de entorno → secrets.toml de Streamlit (solo si el archivo existe)."""
+    _cargar_env()
     url = os.environ.get("SUPABASE_URL")
     key = os.environ.get("SUPABASE_KEY")
     if url:
@@ -19,15 +41,16 @@ def _credenciales_supabase():
         key = str(key).strip()
     if url and key:
         return url, key
-    try:
-        sec = st.secrets["connections"]["supabase"]
-        if isinstance(sec, dict):
-            if not url:
-                url = sec.get("SUPABASE_URL") or sec.get("url")
-            if not key:
-                key = sec.get("SUPABASE_KEY") or sec.get("key")
-    except (StreamlitSecretNotFoundError, KeyError, TypeError):
-        pass
+    if _hay_secrets_toml_streamlit():
+        try:
+            sec = st.secrets["connections"]["supabase"]
+            if isinstance(sec, dict):
+                if not url:
+                    url = sec.get("SUPABASE_URL") or sec.get("url")
+                if not key:
+                    key = sec.get("SUPABASE_KEY") or sec.get("key")
+        except (StreamlitSecretNotFoundError, KeyError, TypeError):
+            pass
     if url:
         url = str(url).strip()
     if key:
@@ -36,16 +59,22 @@ def _credenciales_supabase():
 
 
 def get_supabase_connection():
-    """Conexión única con credenciales explícitas."""
+    """
+    Cliente Supabase. Sin secrets.toml, usa supabase.create_client (no pasa por st.connection,
+    que en muchas versiones exige que exista el archivo de secrets de Streamlit).
+    """
     url, key = _credenciales_supabase()
     if not url or not key:
         raise ValueError(
             "Faltan SUPABASE_URL y SUPABASE_KEY. Opciones: "
-            "(1) Archivo .streamlit/secrets.toml con [connections.supabase]; "
-            "(2) En Codespaces: Settings → Secrets and variables → Codespaces → "
-            "añadir secretos de repositorio SUPABASE_URL y SUPABASE_KEY; "
-            "(3) export SUPABASE_URL=... y SUPABASE_KEY=... en la terminal antes de arrancar."
+            "(1) Archivo .env en la raíz del proyecto (copie .env.example → .env); "
+            "(2) Archivo .streamlit/secrets.toml con [connections.supabase]; "
+            "(3) Secretos de Codespaces o export en terminal con SUPABASE_URL y SUPABASE_KEY."
         )
+    if not _hay_secrets_toml_streamlit():
+        from supabase import create_client
+
+        return create_client(url, key)
     try:
         return st.connection(
             "supabase",

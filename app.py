@@ -33,8 +33,8 @@ def main():
             "`SUPABASE_URL` y `SUPABASE_KEY`."
         )
         st.info(
-            "También puede crear `/workspaces/SGDACIR/.streamlit/secrets.toml` "
-            "copiando `.streamlit/secrets.example.toml` y rellenando los valores."
+            "Alternativa sin Streamlit secrets: cree un archivo **`.env`** en la raíz del repo "
+            "(copie `.env.example` a `.env` y pegue URL y clave). Luego `pip install python-dotenv` si falta."
         )
         return
 
