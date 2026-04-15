@@ -1,31 +1,25 @@
-import streamlit as st
+import streamlit as st  # type: ignore
 import pandas as pd
 from io import BytesIO
 import datetime
+from AuthManager import AuthManager
 
 class ModuloConfiguracion:
     def __init__(self, db):
         self.db = db
         self.tabla_perfiles = "perfiles"
-        self.tabla_inventario = "productos"  # Ajustado a tu JSON
+        self.tabla_inventario = "expedientes"  # Adaptado para despachos legales
         self.tabla_logs = "logs_sistema"
         self.roles_disponibles = ["usuario", "supervisor", "administrador", "master_it"]
 
     def registrar_log(self, accion, modulo, detalle):
-        """Guarda movimientos en la base de datos"""
-        usuario_actual = st.session_state.get('usuario', 'Desconocido')
-        rol_actual = st.session_state.get('rol', 'N/A')
-        log_data = {
-            "usuario": usuario_actual,
-            "rol": rol_actual,
-            "accion": accion,
-            "modulo": modulo,
-            "detalle": detalle
-        }
-        try:
-            self.db.insert(self.tabla_logs, log_data)
-        except:
-            pass
+        """
+        Guarda movimientos en la base de datos (Obsoleto).
+        Como dicta la propuesta de Ley 81, los logs ahora son insertados 
+        inmutablemente a través de un Db Trigger en PostgreSQL. 
+        Este método se deja vacío por retrocompatibilidad.
+        """
+        pass
 
     def render(self):
         st.markdown("<h2 style='color: #707070; font-weight: bold;'>⚙️ Panel de Control Maestro</h2>", unsafe_allow_html=True)
@@ -41,17 +35,27 @@ class ModuloConfiguracion:
             with st.expander("➕ Registrar Nuevo Usuario"):
                 with st.form("form_nuevo_usuario"):
                     c1, c2, c3 = st.columns(3)
-                    with c1: u = st.text_input("Nombre de Usuario")
+                    with c1: u = st.text_input("Correo Electrónico (Usuario)")
                     with c2: p = st.text_input("Contraseña", type="password")
                     with c3: r = st.selectbox("Rol", self.roles_disponibles)
                     
                     if st.form_submit_button("✅ Guardar Usuario"):
                         if u and p:
-                            ins = self.db.insert(self.tabla_perfiles, {"usuario": u.lower().strip(), "clave": p, "rol": r})
-                            if ins:
-                                self.registrar_log("Creación", "Configuración", f"Nuevo usuario: {u}")
-                                st.success(f"Usuario {u} creado.")
+                            auth_manager = AuthManager(self.db)
+                            
+                            # Crear el usuario en Auth de Supabase (con hash)
+                            res_auth = auth_manager.registrar_usuario(u.lower().strip(), p)
+                            
+                            if res_auth and getattr(res_auth, "user", None):
+                                # Registramos el perfil asociado sin texto claro
+                                ins = self.db.insert(self.tabla_perfiles, {
+                                    "usuario": u.lower().strip(), 
+                                    "rol": r
+                                })
+                                st.success(f"Usuario {u} creado correctamente en DB.")
                                 st.rerun()
+                            else:
+                                st.error("Fallo la creación del usuario Auth.")
 
             st.markdown("---")
             st.markdown("### Usuarios Activos")
@@ -79,7 +83,7 @@ class ModuloConfiguracion:
             col_up, col_down = st.columns(2)
             
             with col_up:
-                st.info("Subir Inventario desde Excel")
+                st.info("Subir Inventario de Expedientes desde Excel")
                 archivo = st.file_uploader("Archivo .xlsx", type=["xlsx"])
                 if archivo:
                     df = pd.read_excel(archivo)
@@ -87,12 +91,11 @@ class ModuloConfiguracion:
                         registros = df.to_dict(orient='records')
                         for reg in registros:
                             self.db.insert(self.tabla_inventario, reg)
-                        self.registrar_log("Importación", "Datos", f"Carga masiva: {len(registros)} items")
-                        st.success("¡Importación exitosa!")
+                        st.success("¡Importación procesada y auditada automáticamente!")
 
             with col_down:
                 st.info("Descargar Plantilla")
-                columnas = ["barcode", "nombre", "referencia", "stock", "precio_costo", "p5", "p10"]
+                columnas = ["numero_expediente", "cliente_nombre", "tipo_proceso", "finca", "tomo", "folio", "estado"]
                 df_template = pd.DataFrame(columns=columnas)
                 output = BytesIO()
                 with pd.ExcelWriter(output, engine='xlsxwriter') as writer:
@@ -125,14 +128,14 @@ class ModuloConfiguracion:
                 
                 if st.button("🛠️ Preparar Respaldo Completo", use_container_width=True):
                     # Recolección de datos
-                    data_prod = self.db.fetch("productos")
-                    data_ventas = self.db.fetch("ventas")
+                    data_prod = self.db.fetch("expedientes")
+                    data_clientes = self.db.fetch("clientes")
                     data_perfiles = self.db.fetch("perfiles")
                     
                     output_bak = BytesIO()
                     with pd.ExcelWriter(output_bak, engine='xlsxwriter') as writer:
-                        pd.DataFrame(data_prod).to_excel(writer, sheet_name='Inventario', index=False)
-                        pd.DataFrame(data_ventas).to_excel(writer, sheet_name='Ventas', index=False)
+                        pd.DataFrame(data_prod).to_excel(writer, sheet_name='Expedientes', index=False)
+                        pd.DataFrame(data_clientes).to_excel(writer, sheet_name='Clientes', index=False)
                         pd.DataFrame(data_perfiles).to_excel(writer, sheet_name='Usuarios', index=False)
                     
                     st.download_button(

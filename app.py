@@ -1,9 +1,10 @@
-import streamlit as st
+import streamlit as st  # type: ignore
 import pandas as pd
 from datetime import datetime, date
 from SupabaseConnection import LegalDB
 from configuracion import ModuloConfiguracion
 from contabilidad import ModuloContabilidad
+from AuthManager import AuthManager
 
 
 def _backend():
@@ -83,24 +84,31 @@ def main():
         mod_config.render()
 
 def mostrar_login(db):
-    st.title("⚖️ Acceso SGDA")
+    st.title("⚖️ Acceso Seguro SGDA")
     with st.form("login"):
-        u = st.text_input("Usuario")
+        u = st.text_input("Correo Electrónico (Usuario)")
         p = st.text_input("Contraseña", type="password")
         if st.form_submit_button("Entrar", use_container_width=True):
-            try:
-                res = db.table("usuarios").select("*").eq("usuario", u).eq("password_hash", p).execute()
-            except Exception as e:
-                st.error(f"No se pudo conectar con Supabase. Revise secrets y red. Detalle: {e}")
-                return
-            if res.data:
-                st.session_state['auth'] = res.data[0]
-                # Datos para auditoría de configuracion.py
-                st.session_state['usuario'] = res.data[0]['usuario']
-                st.session_state['rol'] = res.data[0].get('rol', 'usuario')
-                st.rerun()
+            auth_manager = AuthManager(db)
+            sesion = auth_manager.iniciar_sesion(u, p)
+            
+            if sesion and getattr(sesion, "user", None):
+                try:
+                    # Traer datos adicionales del perfil
+                    res = db.table("perfiles").select("*").eq("usuario", u).execute()
+                    
+                    st.session_state['auth'] = {
+                        "id": sesion.user.id,
+                        "email": sesion.user.email,
+                        "nombre_abogado": res.data[0].get("usuario", u) if res.data else u
+                    }
+                    st.session_state['usuario'] = res.data[0].get("usuario", u) if res.data else u
+                    st.session_state['rol'] = res.data[0].get("rol", "usuario") if res.data else "usuario"
+                    st.rerun()
+                except Exception as e:
+                    st.error(f"Falló la recuperación de perfil. Verifique su red: {e}")
             else:
-                st.error("Credenciales Incorrectas")
+                st.error("Credenciales Incorrectas o no autorizadas")
 
 def gestionar_clientes_legal(db, mod_config):
     st.header("Registro de Clientes")
@@ -121,8 +129,7 @@ def gestionar_clientes_legal(db, mod_config):
                     "es_extranjero": es_ext
                 })
                 if ok:
-                    st.success("Cliente guardado exitosamente.")
-                    mod_config.registrar_log("CREAR", "CLIENTES", f"Registró a {nom}")
+                    st.success("Cliente guardado exitosamente. (Auditado autómaticamente)")
             else:
                 st.error("Campos obligatorios faltantes.")
 
