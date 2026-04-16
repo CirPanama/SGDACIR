@@ -50,7 +50,7 @@ class ModuloConfiguracion:
                                 # Registramos el perfil asociado sin texto claro
                                 ins = self.db.insert(self.tabla_perfiles, {
                                     "usuario": u.lower().strip(), 
-                                    "rol": r
+                                    "nivel": r
                                 })
                                 st.success(f"Usuario {u} creado correctamente en DB.")
                                 st.rerun()
@@ -65,14 +65,14 @@ class ModuloConfiguracion:
                     col_info, col_rol, col_acc = st.columns([2, 2, 1])
                     with col_info:
                         st.write(f"**{user['usuario']}**")
-                        st.caption(f"Rol actual: {user['rol']}")
+                        st.caption(f"Nivel actual: {user.get('nivel', 'N/A')}")
                     with col_rol:
                         nuevo_rol = st.selectbox("Cambiar Rol", self.roles_disponibles, 
-                                               index=self.roles_disponibles.index(user['rol']) if user['rol'] in self.roles_disponibles else 0,
+                                               index=self.roles_disponibles.index(user['nivel']) if 'nivel' in user and user['nivel'] in self.roles_disponibles else 0,
                                                key=f"edit_rol_{user['id']}")
                     with col_acc:
                         if st.button("💾", key=f"btn_save_{user['id']}"):
-                            upd = self.db.update(self.tabla_perfiles, {"rol": nuevo_rol}, user['id'])
+                            upd = self.db.update(self.tabla_perfiles, {"nivel": nuevo_rol}, user['id'])
                             if upd:
                                 st.toast("Rol actualizado")
                                 st.rerun()

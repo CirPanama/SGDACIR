@@ -103,7 +103,7 @@ def mostrar_login(db):
                         "nombre_abogado": res.data[0].get("usuario", u) if res.data else u
                     }
                     st.session_state['usuario'] = res.data[0].get("usuario", u) if res.data else u
-                    st.session_state['rol'] = res.data[0].get("rol", "usuario") if res.data else "usuario"
+                    st.session_state['rol'] = res.data[0].get("nivel", "usuario") if res.data else "usuario"
                     st.rerun()
                 except Exception as e:
                     st.error(f"Falló la recuperación de perfil. Verifique su red: {e}")
